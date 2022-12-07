@@ -1,0 +1,182 @@
+################ 创建表 ####################
+# 创建租客表
+
+CREATE TABLE tenant
+(
+    tenant_id int  PRIMARY KEY  comment 'id',
+    tenant_name VARCHAR(10)   comment '名字',
+    tenant_email VARCHAR(30) comment '邮箱',
+    tenant_TEL CHAR(11)  UNIQUE comment '电话',
+    tenant_age int   comment '年龄',
+    tenant_site VARCHAR(20)  comment '地址'
+)comment '租客';
+# 创建房东表
+CREATE TABLE landlord
+(
+    landlord_id int primary key  comment '房东id',
+    landlord_name VARCHAR(10)   comment '名字',
+    landlord_email VARCHAR(30) comment '邮箱',
+    landlord_TEL CHAR(11)  UNIQUE comment '电话',
+    landlord_age int   comment '年龄',
+    landlord_site VARCHAR(20)  comment '地址'
+)comment '房东';
+
+# 创建房屋信息表
+
+
+create table house
+(
+    house_id int primary key auto_increment comment '房屋id',
+    house_tenant int  DEFAULT null  comment '租客id',
+    house_site VARCHAR(20) comment '房屋位置',
+    house_info CHAR(40) DEFAULT null comment '房屋介绍',
+    house_name VARCHAR(20) COMMENT '房屋名',
+    house_landlord int comment '房东id',
+    renting_end date DEFAULT null comment '租房截止日期'
+
+)comment '房屋';
+
+# 添加外键
+ALTER TABLE house ADD foreign key (house_landlord) references landlord(landlord_id);
+ALTER TABLE house ADD foreign key (house_tenant) references  tenant(tenant_id);
+
+
+
+
+
+# 创建租房记录表
+
+CREATE TABLE record
+(
+    record_id int primary key auto_increment comment  '记录id',
+    tenant_id int comment '租户id',
+    landlord_id int comment '房东id',
+    house_id int comment '房屋id',
+    date_start date comment '租房开始时间',
+    date_end date comment '租房结束时间',
+    rent float comment '租金'
+)comment '租房记录';
+
+
+
+# 新建管理员账号表
+CREATE TABLE admin_account
+(
+    admin_id int primary key comment '管理员id',
+    admin_password char(18) comment '管理员密码'
+) comment '管理员账号';
+
+# 新建租户账号表
+CREATE TABLE tenant_account
+(
+    tenant_id int primary key comment '租户id',
+    tenant_password char(18) comment '租户密码'
+) comment '租户账号';
+
+# 新建房东账号表
+CREATE TABLE landlord_account
+(
+    landlord_id int primary key comment '房东id',
+    landlord_password char(18) comment '房东密码'
+) comment '房东账号';
+
+
+################ 增加触发器 ##################
+# 删除租客时删除tenant_account和房屋的租客信息 同时删除record相关
+
+CREATE TRIGGER tenant_delete before delete on tenant
+    for each row
+    begin
+            delete from tenant_account
+            where tenant_account.tenant_id =old.tenant_id;
+            update house set house.house_tenant = null,house.renting_end = null
+            where house.house_tenant = old.tenant_id;
+
+            delete from record
+            where record.tenant_id = old.tenant_id;
+    end;
+
+# 删除房东时删除house 的房东信息和landlord_accoun和record相关
+CREATE TRIGGER landlord_delete before delete on landlord
+    for each row
+    begin
+        delete from landlord_account where landlord_account.landlord_id = old.landlord_id;
+        delete from house where house.house_landlord = old.landlord_id;
+        delete from record where record.landlord_id  = old.landlord_id;
+    end;
+
+# 删除房子时删除相关记录
+CREATE TRIGGER house_delete before delete on house
+    for each row
+    begin
+        delete from record where record.house_id = old.house_id;
+    end;
+
+# 添加租客时将租客的信息加入到租客账号表上，密码默认123456
+CREATE TRIGGER tenant_insert after insert on tenant
+    for each row
+        insert into tenant_account values(new.tenant_id,'123456' );
+
+# 添加房东时将房东的信息添加到房东账号表上，密码默认123456
+CREATE TRIGGER landlord_insert after insert on landlord
+    for each row
+        insert into landlord_account values(new.landlord_id,'123456' );
+
+# 完成记录增加时，终止日期未到，更改房屋信息
+
+CREATE TRIGGER house_update after insert on record
+    for each row
+    begin
+   if(timestampdiff(day,new.date_end,now())<=0  )
+        then
+        update  house set house.house_tenant = new.tenant_id,house.renting_end = new.date_end where house.house_id = new.house_id   ;
+        end if;
+    end;
+
+###################### 添加索引 #########################
+create index house_name on house(house_name);
+create index house_site on house(house_site);
+create index record_end on record(date_end);
+create index house_info on house(house_info);
+create index house_end on house(renting_end);
+######### 创建视图 ##############
+# 空房子
+ create or replace  view empty_house
+as SELECT
+house_id  as '房屋id' ,house_name as '房屋名字',house_site as '房屋城市',house_info as '房屋信息',
+ (case when house_tenant then '已有租客' else '正在出租' END) as '出租状态'
+from house where isnull(house.house_tenant) ;
+
+
+# 房屋查询视图
+create or replace  view s_house
+as SELECT
+house_id as'房屋id' , house_name as'房屋名字',house_site as'房屋城市',house_info as '房屋信息',
+          (case when house_tenant then '已有租客' else '正在出租' END) as '出租状态'
+from house;
+
+# 租客-房子
+create or replace  view tenant_house
+as SELECT
+house_id  as '房屋id' , house_name as '房屋名字',house_site as '房屋城市',house_info as '房屋信息',house_tenant as '租客id',renting_end as'截止日期'
+from house where !isnull(house_tenant);
+
+# 正在出租的记录
+create or replace view renting_record
+as
+select record.*, tenant.tenant_name '租客名字' ,house.house_name as '房屋名字'
+    from record
+    left outer join tenant on record.tenant_id = tenant.tenant_id
+    left join house on record.house_id = house.house_id
+    where timestampdiff(day,date_end,now())<0;
+
+# 房东出租的所有房
+create view landlord_house
+as SELECT
+house_landlord as '房东id',landlord_name as'房东名字' ,house_id as'房屋id',house_name'房屋名字'
+from house left outer join landlord on house.house_landlord = landlord.landlord_id;
+
+# 每个地区房子的数量
+create or replace view count_house
+as SELECT
+house_site as'房屋城市',count(*) as'数量' from house group by house_site;

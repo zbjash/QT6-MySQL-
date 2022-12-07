@@ -5,9 +5,10 @@
 整体都是用自动生成的槽和信号连接的（除了回车信号和admin界面的退出是自己写的），因此不要轻易改动对象名称，
 管理员客户端（adminwindow）懒得重写函数，直接switch判断当前页面全程c+v了，可读性很差，除了能跑的起来一无是处
 整体代码突出一个懒，看看思路就OK
+
 已知BUG：admin界面新增row时还可以更改其他row的数据，想实现锁定其他row但是国内网上实现太复杂，果断放弃
 
-QT6的MySQL驱动配置看这：https://blog.csdn.net/DreamerZC/article/details/128040436
+QT6的MySQL驱动配置看这：https://blog.csdn.net/DreamerZC/article/details/128040436 感谢这位大哥无私分享
 
 
 QT6打包后实现连接数据库看这：
